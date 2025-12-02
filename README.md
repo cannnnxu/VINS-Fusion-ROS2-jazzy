@@ -1,51 +1,86 @@
 # VINS-Fusion
 
-## ROS2 Humble version of VINS-Fusion, suitable for running on ARM devices
+## ROS2 Jazzy version of VINS-Fusion Ubuntu 24.04
 
-### Notices
-It is now possibler to run VINS-Fusion on ROS2 Humble using ros2 launch or ros2 run.
+Code based in large part on [this repository](https://github.com/zinuok/VINS-Fusion-ROS2) by zinuok and [this repository](https://github.com/JanekDev/VINS-Fusion-ROS2-humble-arm) by JanekDev.
 
-Code based in large part on [this repository](https://github.com/zinuok/VINS-Fusion-ROS2) by zinuok.
+**System:** Ubuntu 24.04 (Noble Numbat)
 
+**ROS Version:** ROS 2 Jazzy
 
->TO BE DELETED (to make package smaller):
->- GPU enable/disable features also have been added: refer [EuRoC config](https://github.com/zinuok/VINS-Fusion-ROS2/blob/main/config/euroc/euroc_stereo_imu_config.yaml#L19-L21) (refered from [here](https://github.com/pjrambo/VINS-Fusion-gpu) and [here](https://github.com/pjrambo/VINS-Fusion-gpu/issues/33#issuecomment-1097642597))
->  - The GPU version has some CUDA library [dependencies: OpenCV with CUDA](https://github.com/zinuok/VINS-Fusion-ROS2/blob/main/vins/src/featureTracker/feature_tracker.h#L21-L23). Therefore, if it is a bothersome to you and only need the cpu version, please comment the following compiler macro at line 14 in the 'feature_tracker.h':
->  ```cpp
->  #define GPU_MODE 1
->  ```
+**Repo:** [VINS-Fusion-ROS2-jazzy](https://github.com/cannnnxu/VINS-Fusion-ROS2-jazzy)
 
-### Prerequisites
-- **System**
-  - Ubuntu 20.04
-  - ROS2 humble
-- **Libraries**
-  - OpenCV & cv_bridge for ROS2 Humble
-  - Ceres Solver-2.1.0
-  - Eigen-3.3.9
+---
 
+## 1. Clone and Patch Code
+ROS 2 Jazzy uses `cv_bridge.hpp` instead of `.h`. We must patch the code immediately after cloning.
 
-### Build
-1. Install dependencies by running the `install_external_deps.sh` script (OpenCV, Ceres, Eigen will be installed)
-
-2. Build the package using colcon build
 ```bash
+cd ~/jazzy_ws/src
+git clone https://github.com/cannnnxu/VINS-Fusion-ROS2-jazzy
+cd VINS-Fusion-ROS2-jazzy
+
+# Patch: Replace cv_bridge.h with cv_bridge.hpp in all files
+find . -type f -print0 | xargs -0 sed -i 's/cv_bridge\/cv_bridge.h/cv_bridge\/cv_bridge.hpp/g'
+
+# Return to workspace root
+cd ~/jazzy_ws
+```
+
+## 2. Install dependencies
+
+   ```bash
+    sudo apt update
+    sudo apt install ros-jazzy-cv-bridge ros-jazzy-image-transport
+    sudo apt-get install -y cmake libgoogle-glog-dev libatlas-base-dev libsuitesparse-dev \
+    libboost-python-dev libboost-dev libboost-filesystem-dev libboost-program-options-dev
+   ```
+## 3. Ceres Solver 2.1.0 (Manual Install)
+Crucial: Ubuntu 24.04 ships with Ceres 2.2.0, which removes LocalParameterization and breaks VINS. We must manually install version 2.1.0 and disable sparse suites to avoid conflicts with Anaconda or system libraries.
+```bash
+cd ~/Downloads
+wget http://ceres-solver.org/ceres-solver-2.1.0.tar.gz
+tar zxf ceres-solver-2.1.0.tar.gz
+cd ceres-solver-2.1.0
+mkdir build && cd build
+
+# Configure build (Disable CUDA and Sparse to ensure stability)
+cmake .. -DBUILD_TESTING=OFF -DBUILD_EXAMPLES=OFF -DCUDA=OFF -DSUITESPARSE=OFF -DCXSPARSE=OFF
+
+make -j$(nproc)
+sudo make install
+```
+
+## 4. Build 
+```bash
+cd ~/jazzy_ws
+source /opt/ros/jazzy/setup.bash
 colcon build --symlink-install
+source install/setup.bash
 ```
-
-
-### Playing EuRoC dataset bags
-To download a sample EuRoC dataset bag, run `get_example_data.sh` script. Then convert the bag to ROS2 format using `rosbags-convert` script.
+## 5. Prepare Data
+ROS 2 Jazzy does not support legacy .bag files natively (due to missing ROS 1 drivers). We use rosbags to convert them.
 ```bash
+# Downloads
 ./get_example_data.sh
-rosbags-convert data/V1_02_medium.bag --dst /output/path
-```
-In case you don't have `rosbags-convert` script, you can install it using `pip install rosbags` command.
-Then, you can play the bag using standard `ros2 bag play` command:
-```bash
-ros2 bag play /data/V1_02_medium
+pip install rosbags --break-system-packages
+export PATH=$PATH:~/.local/bin
+rosbags-convert --src ./V1_02_medium.bag --dst ./data/V1_02_medium
 ```
 
+## 6. Run VINS-Fusion
+```bash
+    source ~/jazzy_ws/install/setup.bash
+    ros2 launch vins vins_rviz.launch.xml
+    ros2 run vins vins_node ~/jazzy_ws/src/VINS-Fusion-ROS2-jazzy/config/euroc/euroc_mono_imu_config.yaml
+    (optional) ros2 run loop_fusion loop_fusion_node ~/jazzy_ws/src/VINS-Fusion-ROS2-jazzy/config/euroc/euroc_mono_imu_config.yaml 
+    ros2 bag play src/VINS-Fusion-ROS2-jazzy/data/V1_02_medium
+```
+
+
+
+
+============================================================================================================================================================================================================================
 
 # ORIGINAL README
 
